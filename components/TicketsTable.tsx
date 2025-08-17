@@ -405,20 +405,25 @@ export default function TicketsTable() {
             ))}
           </select>
 
-          <input
-            type="date"
-            className="rounded bg-slate-900 p-2 border border-slate-700"
-            value={dateFrom}
-            onChange={(e) => setDateFrom(e.target.value)}
-            title="Created on/after"
-          />
-          <input
-            type="date"
-            className="rounded bg-slate-900 p-2 border border-slate-700"
-            value={dateTo}
-            onChange={(e) => setDateTo(e.target.value)}
-            title="Created on/before"
-          />
+          <div className="flex items-center gap-2">
+            <input
+              type="date"
+              className="rounded bg-slate-900 p-2 border border-slate-700"
+              value={dateFrom}
+              onChange={(e) => setDateFrom(e.target.value)}
+              title="Created on/after"
+              aria-label="Created on or after"
+            />
+            <span className="px-1 text-slate-400 select-none" aria-hidden="true">–</span>
+            <input
+              type="date"
+              className="rounded bg-slate-900 p-2 border border-slate-700"
+              value={dateTo}
+              onChange={(e) => setDateTo(e.target.value)}
+              title="Created on/before"
+              aria-label="Created on or before"
+            />
+          </div>
 
           <input
             className="w-64 rounded bg-slate-900 p-2"
@@ -457,8 +462,8 @@ export default function TicketsTable() {
       {usersErr && isAdmin && <div className="px-3 pb-2 text-sm text-amber-400">Users: {usersErr}</div>}
 
       {/* Table */}
-      <div className="px-3 pb-3">
-        <table className="table-fixed w-full border-collapse">
+      <div className="px-3 pb-3 overflow-x-auto">
+        <table className="table-fixed min-w-[1080px] w-full border-collapse">
           <thead className="bg-slate-900/50 text-sm">
             <tr className="border-b border-slate-800">
               <th className="w-[44px] py-2 pr-2 text-left">
@@ -512,12 +517,13 @@ export default function TicketsTable() {
                   onClick={go}
                   className="border-b border-slate-800 hover:bg-slate-900/40 cursor-pointer"
                 >
-                  <td className="py-2 pr-2" onClick={stop}>
+                  <td className="py-2 pr-2">
                     <input
                       type="checkbox"
                       className="accent-slate-500"
                       checked={!!selected[t._id]}
                       onChange={(e) => toggleOne(t._id, e.target.checked)}
+                      onClick={stop}
                     />
                   </td>
 
@@ -532,8 +538,9 @@ export default function TicketsTable() {
                     </Link>
                   </td>
 
-                  <td className="py-2" onClick={stop}>
+                  <td className="py-2">
                     <select
+                      onClick={stop}
                       value={t.priority}
                       onChange={(e) => updateField(t._id, "priority", e.target.value)}
                       className="w-28 bg-slate-900 border border-slate-700 rounded px-1 py-0.5"
@@ -545,8 +552,9 @@ export default function TicketsTable() {
                     </select>
                   </td>
 
-                  <td className="py-2" onClick={stop}>
+                  <td className="py-2">
                     <select
+                      onClick={stop}
                       value={t.category}
                       onChange={(e) => updateField(t._id, "category", e.target.value)}
                       className="w-32 bg-slate-900 border border-slate-700 rounded px-1 py-0.5"
@@ -558,8 +566,9 @@ export default function TicketsTable() {
                     </select>
                   </td>
 
-                  <td className="py-2" onClick={stop}>
+                  <td className="py-2">
                     <select
+                      onClick={stop}
                       value={t.status}
                       onChange={(e) => updateField(t._id, "status", e.target.value)}
                       className="w-32 bg-slate-900 border border-slate-700 rounded px-1 py-0.5"
@@ -577,9 +586,10 @@ export default function TicketsTable() {
                     </div>
                   </td>
 
-                  <td className="py-2" onClick={stop}>
+                  <td className="py-2">
                     {isAdmin ? (
                       <select
+                        onClick={stop}
                         value={t.assignee ?? ""}
                         onChange={(e) => updateField(t._id, "assignee", e.target.value)}
                         className="w-[220px] max-w-[220px] truncate bg-slate-900 border border-slate-700 rounded px-1 py-0.5"
