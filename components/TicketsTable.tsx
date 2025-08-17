@@ -21,10 +21,6 @@ type Ticket = {
 
 type User = { _id: string; name: string; email: string; role: "admin" | "user" };
 
-// Compact grid so the table fits the card without a horizontal slider
-const ROW_GRID =
-  "grid grid-cols-[44px_minmax(160px,1fr)_100px_110px_110px_minmax(140px,1fr)_160px_160px]";
-
 type SortKey = "title" | "priority" | "category" | "status" | "assignee" | "createdAt";
 
 export default function TicketsTable() {
@@ -38,14 +34,15 @@ export default function TicketsTable() {
   const [statusFilter, setStatusFilter] = useState<"" | Ticket["status"]>("");
   const [priorityFilter, setPriorityFilter] = useState<"" | Ticket["priority"]>("");
   const [categoryFilter, setCategoryFilter] = useState<"" | Ticket["category"]>("");
-  const [dateFrom, setDateFrom] = useState<string>(""); // yyyy-mm-dd
-  const [dateTo, setDateTo] = useState<string>(""); // yyyy-mm-dd
+  const [dateFrom, setDateFrom] = useState<string>("");
+  const [dateTo, setDateTo] = useState<string>("");
   const [mineOnly, setMineOnly] = useState(false);
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState("");
   const [selected, setSelected] = useState<Record<string, boolean>>({});
   const [users, setUsers] = useState<User[]>([]);
   const [usersErr, setUsersErr] = useState<string>("");
+
   useEffect(() => {
     async function loadUsers() {
       if (!isAdmin) return;
@@ -63,10 +60,9 @@ export default function TicketsTable() {
     loadUsers();
   }, [isAdmin]);
 
-  // Build complete assignee options including admin session user if not present
+  // include current admin as selectable if missing
   const assigneeOptions = useMemo(() => {
     const list = [...users];
-    // Ensure the currently signed-in admin (e.g., demo admin) is selectable even if not stored in DB
     if (isAdmin) {
       const sesEmail = (session?.user?.email || "").toLowerCase();
       if (sesEmail && !list.some(u => u.email.toLowerCase() === sesEmail)) {
@@ -74,11 +70,10 @@ export default function TicketsTable() {
           _id: "session-admin",
           name: session?.user?.name || "Admin",
           email: session?.user?.email || "",
-          role: "admin"
+          role: "admin",
         } as User);
       }
     }
-    // sort by role (admin first), then name, then email
     return list.sort((a, b) => {
       if (a.role !== b.role) return a.role === "admin" ? -1 : 1;
       const an = (a.name || "").toLowerCase();
@@ -91,7 +86,6 @@ export default function TicketsTable() {
     });
   }, [users, isAdmin, session?.user]);
 
-  // sorting & pagination
   const [sortBy, setSortBy] = useState<SortKey>("createdAt");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
   const [page, setPage] = useState(1);
@@ -105,7 +99,6 @@ export default function TicketsTable() {
   const currentFetch = useRef<AbortController | null>(null);
 
   async function load() {
-    // cancel any in-flight fetch to avoid race conditions
     currentFetch.current?.abort();
     const ctrl = new AbortController();
     currentFetch.current = ctrl;
@@ -129,7 +122,7 @@ export default function TicketsTable() {
         });
         return next;
       });
-      setPage(1); // reset to first page on new load
+      setPage(1);
     } catch (err: any) {
       if (err?.name === "AbortError") return;
       setErrorMsg(err.message ?? "Failed to load tickets");
@@ -178,10 +171,7 @@ export default function TicketsTable() {
     const onCreated = (e: Event) => {
       const ce = e as CustomEvent<Ticket | undefined>;
       const t = ce.detail;
-      if (!t) {
-        maybeRefresh();
-        return;
-      }
+      if (!t) return maybeRefresh();
       setData((prev) => (prev.some((p) => p._id === t._id) ? prev : [t, ...prev]));
     };
     window.addEventListener("tickets:created" as any, onCreated as any);
@@ -279,7 +269,6 @@ export default function TicketsTable() {
     });
 
     if (!res.ok) {
-      // revert on failure
       setData((prev) =>
         prev.map((t) => (t._id === id ? ({ ...t, [field]: original } as Ticket) : t))
       );
@@ -287,17 +276,8 @@ export default function TicketsTable() {
       return;
     }
 
-    // background refresh to sync any server-side changes
     load();
   }
-
-  const stop = (e: React.SyntheticEvent) => e.stopPropagation();
-  const onRowKey = (id: string) => (e: React.KeyboardEvent<HTMLDivElement>) => {
-    if (e.key === "Enter" || e.key === " ") {
-      e.preventDefault();
-      router.push(`/tickets/${id}`);
-    }
-  };
 
   const fmt = (d: string) =>
     `${new Date(d).toLocaleDateString(undefined, {
@@ -306,19 +286,20 @@ export default function TicketsTable() {
       day: "numeric",
     })} ${new Date(d).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}`;
 
-  // ----- Derived filtered/sorted/paged rows -----
+  // ----- Derived rows -----
   const filtered = useMemo(() => {
     const ql = q.trim().toLowerCase();
     const fromTs = dateFrom ? Date.parse(dateFrom) : null;
-    const toTs = dateTo ? Date.parse(dateTo) + 24 * 60 * 60 * 1000 - 1 : null; // inclusive day
+    const toTs = dateTo ? Date.parse(dateTo) + 24 * 60 * 60 * 1000 - 1 : null;
 
     return data.filter((t) => {
       if (statusFilter && t.status !== statusFilter) return false;
       if (priorityFilter && t.priority !== priorityFilter) return false;
       if (categoryFilter && t.category !== categoryFilter) return false;
       if (mineOnly && myEmail) {
-        const mine = t.assignee?.toLowerCase() === myEmail.toLowerCase() ||
-                     t.reporterEmail?.toLowerCase() === myEmail.toLowerCase();
+        const mine =
+          t.assignee?.toLowerCase() === myEmail.toLowerCase() ||
+          t.reporterEmail?.toLowerCase() === myEmail.toLowerCase();
         if (!mine) return false;
       }
       if (fromTs && Date.parse(t.createdAt) < fromTs) return false;
@@ -329,16 +310,17 @@ export default function TicketsTable() {
     });
   }, [data, statusFilter, priorityFilter, categoryFilter, dateFrom, dateTo, mineOnly, myEmail, q]);
 
+  const [sortByState, sortDirState] = [sortBy, sortDir];
   const sorted = useMemo(() => {
-    const dir = sortDir === "asc" ? 1 : -1;
+    const dir = sortDirState === "asc" ? 1 : -1;
     const priOrder = { Low: 0, Medium: 1, High: 2, Urgent: 3 } as const;
     return [...filtered].sort((a, b) => {
-      let va: any = a[sortBy];
-      let vb: any = b[sortBy];
-      if (sortBy === "createdAt") {
+      let va: any = a[sortByState];
+      let vb: any = b[sortByState];
+      if (sortByState === "createdAt") {
         va = Date.parse(a.createdAt);
         vb = Date.parse(b.createdAt);
-      } else if (sortBy === "priority") {
+      } else if (sortByState === "priority") {
         va = priOrder[a.priority];
         vb = priOrder[b.priority];
       } else {
@@ -349,7 +331,7 @@ export default function TicketsTable() {
       if (va > vb) return 1 * dir;
       return 0;
     });
-  }, [filtered, sortBy, sortDir]);
+  }, [filtered, sortByState, sortDirState]);
 
   const totalPages = Math.max(1, Math.ceil(sorted.length / pageSize));
   const pageRows = useMemo(() => {
@@ -369,6 +351,8 @@ export default function TicketsTable() {
     </span>
   );
 
+  const stop = (e: React.SyntheticEvent) => e.stopPropagation();
+
   return (
     <div className="rounded-2xl border border-slate-800">
       {/* Toolbar */}
@@ -380,9 +364,7 @@ export default function TicketsTable() {
                 key={s || "all"}
                 onClick={() => setStatusFilter(s as any)}
                 className={`px-3 py-1.5 rounded-md text-sm ${
-                  statusFilter === s
-                    ? "bg-slate-700 text-white"
-                    : "text-slate-300 hover:bg-slate-800"
+                  statusFilter === s ? "bg-slate-700 text-white" : "text-slate-300 hover:bg-slate-800"
                 }`}
               >
                 {s || "All"}
@@ -401,7 +383,6 @@ export default function TicketsTable() {
             My Tickets
           </label>
 
-          {/* Extra filters */}
           <select
             className="rounded bg-slate-900 p-2 border border-slate-700"
             value={priorityFilter}
@@ -429,7 +410,6 @@ export default function TicketsTable() {
             className="rounded bg-slate-900 p-2 border border-slate-700"
             value={dateFrom}
             onChange={(e) => setDateFrom(e.target.value)}
-            placeholder="From"
             title="Created on/after"
           />
           <input
@@ -437,7 +417,6 @@ export default function TicketsTable() {
             className="rounded bg-slate-900 p-2 border border-slate-700"
             value={dateTo}
             onChange={(e) => setDateTo(e.target.value)}
-            placeholder="To"
             title="Created on/before"
           />
 
@@ -478,137 +457,167 @@ export default function TicketsTable() {
       {usersErr && isAdmin && <div className="px-3 pb-2 text-sm text-amber-400">Users: {usersErr}</div>}
 
       {/* Table */}
-      <div className="px-1 pb-2">
-        {/* Header */}
-        <div
-          className={`${ROW_GRID} border-b border-slate-800 bg-slate-900/50 px-3 py-2 text-sm font-medium`}
-        >
-          <div>
-            <input
-              type="checkbox"
-              className="accent-slate-500"
-              checked={pageRows.length > 0 && pageRows.every((t) => !!selected[t._id])}
-              onChange={(e) => toggleAll(e.target.checked)}
-              onClick={stop}
-            />
-          </div>
-          <button className="text-left" onClick={() => onSort("title")}>Title {sortIcon("title")}</button>
-          <button className="text-left" onClick={() => onSort("priority")}>Priority {sortIcon("priority")}</button>
-          <button className="text-left" onClick={() => onSort("category")}>Category {sortIcon("category")}</button>
-          <button className="text-left" onClick={() => onSort("status")}>Status {sortIcon("status")}</button>
-          <div>Reporter</div>
-          <button className="text-left" onClick={() => onSort("assignee")}>Assignee {sortIcon("assignee")}</button>
-          <button className="text-right" onClick={() => onSort("createdAt")}>Created {sortIcon("createdAt")}</button>
-        </div>
+      <div className="px-3 pb-3">
+        <table className="table-fixed w-full border-collapse">
+          <thead className="bg-slate-900/50 text-sm">
+            <tr className="border-b border-slate-800">
+              <th className="w-[44px] py-2 pr-2 text-left">
+                <input
+                  type="checkbox"
+                  className="accent-slate-500"
+                  checked={pageRows.length > 0 && pageRows.every((t) => !!selected[t._id])}
+                  onChange={(e) => toggleAll(e.target.checked)}
+                />
+              </th>
+              <th className="w-[28%] py-2 text-left">
+                <button onClick={() => onSort("title")} className="hover:underline">
+                  Title {sortIcon("title")}
+                </button>
+              </th>
+              <th className="w-[112px] py-2 text-left">
+                <button onClick={() => onSort("priority")} className="hover:underline">
+                  Priority {sortIcon("priority")}
+                </button>
+              </th>
+              <th className="w-[128px] py-2 text-left">
+                <button onClick={() => onSort("category")} className="hover:underline">
+                  Category {sortIcon("category")}
+                </button>
+              </th>
+              <th className="w-[128px] py-2 text-left">
+                <button onClick={() => onSort("status")} className="hover:underline">
+                  Status {sortIcon("status")}
+                </button>
+              </th>
+              <th className="w-[16%] py-2 text-left">Reporter</th>
+              <th className="w-[220px] py-2 text-left">
+                <button onClick={() => onSort("assignee")} className="hover:underline">
+                  Assignee {sortIcon("assignee")}
+                </button>
+              </th>
+              <th className="w-[168px] py-2 pr-2 text-right">
+                <button onClick={() => onSort("createdAt")} className="hover:underline">
+                  Created {sortIcon("createdAt")}
+                </button>
+              </th>
+            </tr>
+          </thead>
 
-        {/* Rows */}
-        <div className="divide-y divide-slate-800">
-          {pageRows.map((t) => {
-            const go = () => router.push(`/tickets/${t._id}`);
-            return (
-              <div
-                key={t._id}
-                role="button"
-                tabIndex={0}
-                onClick={go}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter" || e.key === " ") {
-                    e.preventDefault();
-                    go();
-                  }
-                }}
-                className={`${ROW_GRID} px-3 py-2 text-sm hover:bg-slate-900/40 cursor-pointer focus:outline-none focus:ring-2 focus:ring-slate-600`}
-              >
-                <div onClick={stop}>
-                  <input
-                    type="checkbox"
-                    className="accent-slate-500"
-                    checked={!!selected[t._id]}
-                    onChange={(e) => toggleOne(t._id, e.target.checked)}
-                  />
-                </div>
-                <div onClick={stop} className="truncate">
-                  <Link
-                    href={`/tickets/${t._id}`}
-                    className="text-sky-400 hover:underline"
-                    onClick={(e) => e.stopPropagation()}
-                  >
-                    {t.title}
-                  </Link>
-                </div>
-                <div onClick={stop}>
-                  <select
-                    value={t.priority}
-                    onChange={(e) => updateField(t._id, "priority", e.target.value)}
-                    className="bg-slate-900 border border-slate-700 rounded px-1 py-0.5"
-                    disabled={!isAdmin}
-                  >
-                    {["Low", "Medium", "High", "Urgent"].map((p) => (
-                      <option key={p}>{p}</option>
-                    ))}
-                  </select>
-                </div>
-                <div onClick={stop}>
-                  <select
-                    value={t.category}
-                    onChange={(e) => updateField(t._id, "category", e.target.value)}
-                    className="bg-slate-900 border border-slate-700 rounded px-1 py-0.5"
-                    disabled={!isAdmin}
-                  >
-                    {["Hardware", "Software", "Network", "Other"].map((c) => (
-                      <option key={c}>{c}</option>
-                    ))}
-                  </select>
-                </div>
-                <div onClick={stop}>
-                  <select
-                    value={t.status}
-                    onChange={(e) => updateField(t._id, "status", e.target.value)}
-                    className="bg-slate-900 border border-slate-700 rounded px-1 py-0.5"
-                    disabled={!isAdmin}
-                  >
-                    {["Open", "In Progress", "Resolved", "Closed"].map((s) => (
-                      <option key={s}>{s}</option>
-                    ))}
-                  </select>
-                </div>
-                <div className="truncate">{t.reporterName}</div>
-                <div onClick={stop}>
-                  {isAdmin ? (
-                    <select
-                      value={t.assignee ?? ""}
-                      onChange={(e) => updateField(t._id, "assignee", e.target.value)}
-                      className="w-full max-w-[260px] truncate bg-slate-900 border border-slate-700 rounded px-1 py-0.5"
-                      title={t.assignee || "Unassigned"}
+          <tbody className="text-sm">
+            {pageRows.map((t) => {
+              const go = () => router.push(`/tickets/${t._id}`);
+              return (
+                <tr
+                  key={t._id}
+                  onClick={go}
+                  className="border-b border-slate-800 hover:bg-slate-900/40 cursor-pointer"
+                >
+                  <td className="py-2 pr-2" onClick={stop}>
+                    <input
+                      type="checkbox"
+                      className="accent-slate-500"
+                      checked={!!selected[t._id]}
+                      onChange={(e) => toggleOne(t._id, e.target.checked)}
+                    />
+                  </td>
+
+                  <td className="py-2">
+                    <Link
+                      href={`/tickets/${t._id}`}
+                      className="block w-full truncate text-sky-400 hover:underline"
+                      onClick={stop}
+                      title={t.title}
                     >
-                      <option value="">Unassigned</option>
-                      {assigneeOptions.map((u) => (
-                        <option key={u._id} value={u.email}>
-                          {u.name} ({u.email}){u.role === "admin" ? " · admin" : ""}
-                        </option>
+                      {t.title}
+                    </Link>
+                  </td>
+
+                  <td className="py-2" onClick={stop}>
+                    <select
+                      value={t.priority}
+                      onChange={(e) => updateField(t._id, "priority", e.target.value)}
+                      className="w-28 bg-slate-900 border border-slate-700 rounded px-1 py-0.5"
+                      disabled={!isAdmin}
+                    >
+                      {["Low", "Medium", "High", "Urgent"].map((p) => (
+                        <option key={p}>{p}</option>
                       ))}
                     </select>
-                  ) : (
-                    <div className="truncate max-w-[260px]" title={t.assignee || "Unassigned"}>
-                      {t.assignee || <span className="opacity-60">Unassigned</span>}
+                  </td>
+
+                  <td className="py-2" onClick={stop}>
+                    <select
+                      value={t.category}
+                      onChange={(e) => updateField(t._id, "category", e.target.value)}
+                      className="w-32 bg-slate-900 border border-slate-700 rounded px-1 py-0.5"
+                      disabled={!isAdmin}
+                    >
+                      {["Hardware", "Software", "Network", "Other"].map((c) => (
+                        <option key={c}>{c}</option>
+                      ))}
+                    </select>
+                  </td>
+
+                  <td className="py-2" onClick={stop}>
+                    <select
+                      value={t.status}
+                      onChange={(e) => updateField(t._id, "status", e.target.value)}
+                      className="w-32 bg-slate-900 border border-slate-700 rounded px-1 py-0.5"
+                      disabled={!isAdmin}
+                    >
+                      {["Open", "In Progress", "Resolved", "Closed"].map((s) => (
+                        <option key={s}>{s}</option>
+                      ))}
+                    </select>
+                  </td>
+
+                  <td className="py-2 px-2">
+                    <div className="truncate" title={`${t.reporterName} <${t.reporterEmail}>`}>
+                      {t.reporterName}
                     </div>
-                  )}
-                </div>
-                <div className="text-right whitespace-nowrap tabular-nums pr-1">
-                  {fmt(t.createdAt)}
-                </div>
-              </div>
-            );
-          })}
-          {pageRows.length === 0 && (
-            <div className="px-3 py-6 text-center text-sm text-slate-400">
-              {mineOnly ? "No tickets assigned to or reported by you yet." : "No tickets to show"}
-            </div>
-          )}
-        </div>
+                  </td>
+
+                  <td className="py-2" onClick={stop}>
+                    {isAdmin ? (
+                      <select
+                        value={t.assignee ?? ""}
+                        onChange={(e) => updateField(t._id, "assignee", e.target.value)}
+                        className="w-[220px] max-w-[220px] truncate bg-slate-900 border border-slate-700 rounded px-1 py-0.5"
+                        title={t.assignee || "Unassigned"}
+                      >
+                        <option value="">Unassigned</option>
+                        {assigneeOptions.map((u) => (
+                          <option key={u._id} value={u.email}>
+                            {u.name} ({u.email}){u.role === "admin" ? " · admin" : ""}
+                          </option>
+                        ))}
+                      </select>
+                    ) : (
+                      <div className="truncate max-w-[220px]" title={t.assignee || "Unassigned"}>
+                        {t.assignee || <span className="opacity-60">Unassigned</span>}
+                      </div>
+                    )}
+                  </td>
+
+                  <td className="py-2 pr-2 text-right whitespace-nowrap tabular-nums">
+                    {fmt(t.createdAt)}
+                  </td>
+                </tr>
+              );
+            })}
+
+            {pageRows.length === 0 && (
+              <tr>
+                <td colSpan={8} className="px-3 py-6 text-center text-slate-400">
+                  {mineOnly ? "No tickets assigned to or reported by you yet." : "No tickets to show"}
+                </td>
+              </tr>
+            )}
+          </tbody>
+        </table>
 
         {/* Pagination */}
-        <div className="flex items-center justify-between gap-3 px-3 py-3 text-sm">
+        <div className="mt-3 flex items-center justify-between gap-3 text-sm">
           <div className="flex items-center gap-2">
             <span className="opacity-70">Rows per page</span>
             <select
