@@ -19,3 +19,23 @@ package-lock.json
 .env
 .env.local
 .env.*.local
+
+# system files
+*.swp
+*.swo
+*.orig
+
+# IDE/editor files
+.vscode/
+.idea/
+
+# logs
+logs
+*.log
+
+# coverage / test
+coverage/
+*.lcov
+
+# MacOS
+*.DS_Store
