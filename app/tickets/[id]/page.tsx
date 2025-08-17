@@ -1,14 +1,12 @@
 // app/tickets/[id]/page.tsx
-import { dbConnect } from "@/lib/db";
-import { Ticket } from "@/models/Ticket";
 import TicketDetail from "@/components/TicketDetail";
+import { dbConnect } from "@/lib/db";
 import { notFound } from "next/navigation";
+import { Ticket } from "@/models/Ticket";
 
-type Props = { params: { id: string } };
-
-// Define the expected shape of a lean() ticket doc to satisfy TS
+// A typed shape for the result of .lean()
 type LeanTicketDoc = {
-  _id: unknown;
+  _id: string;
   title: string;
   description: string;
   priority: "Low" | "Medium" | "High" | "Urgent";
@@ -16,12 +14,16 @@ type LeanTicketDoc = {
   status: "Open" | "In Progress" | "Resolved" | "Closed";
   reporterName: string;
   reporterEmail: string;
-  assignee?: string;
+  assignee?: string | null;
   createdAt: string | Date;
   updatedAt: string | Date;
 };
 
-export default async function TicketPage({ params }: Props) {
+export default async function TicketPage({
+  params,
+}: {
+  params: { id: string };
+}) {
   await dbConnect();
 
   // Use a typed lean() so TS knows the fields on the returned object
@@ -38,15 +40,15 @@ export default async function TicketPage({ params }: Props) {
     reporterName: doc.reporterName,
     reporterEmail: doc.reporterEmail,
     assignee: doc.assignee ?? "",
-    createdAt: new Date(doc.createdAt).toISOString(),
-    updatedAt: new Date(doc.updatedAt).toISOString(),
+    createdAt:
+      typeof doc.createdAt === "string"
+        ? doc.createdAt
+        : new Date(doc.createdAt).toISOString(),
+    updatedAt:
+      typeof doc.updatedAt === "string"
+        ? doc.updatedAt
+        : new Date(doc.updatedAt).toISOString(),
   };
 
-  return (
-    <div className="mx-auto max-w-5xl p-4 min-w-0">
-      <div className="rounded-2xl border border-slate-800 p-4 w-full min-w-0 overflow-visible">
-        <TicketDetail ticket={ticket} />
-      </div>
-    </div>
-  );
+  return <TicketDetail ticket={ticket} />;
 }
