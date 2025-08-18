@@ -31,6 +31,14 @@ export async function GET(req: NextRequest) {
   const status = (searchParams.get("status") || "").trim();
   const priority = (searchParams.get("priority") || "").trim();
   const category = (searchParams.get("category") || "").trim();
+  // Accept multiple query keys for backward/forward compatibility
+  const truthy = new Set(["1", "true", "yes", "on"]); // case-insensitive
+  const archKeys = ["archived", "showArchived", "includeArchived"]; // support all
+  let includeArchived = false;
+  for (const key of archKeys) {
+    const v = (searchParams.get(key) || "").trim().toLowerCase();
+    if (truthy.has(v)) { includeArchived = true; break; }
+  }
 
   // NEW: secure “my tickets” flag
   const mine = (searchParams.get("mine") || "").trim() === "1";
@@ -42,6 +50,8 @@ export async function GET(req: NextRequest) {
   const pageSize = Math.min(Math.max(parseInt(searchParams.get("pageSize") || "50", 10), 1), 500);
 
   const filter: Record<string, any> = {};
+  // Hide archived by default, but allow undefined/absent (older docs) to show
+  if (!includeArchived) filter.archived = { $ne: true };
   if (q) {
     filter.$or = [
       { title: { $regex: q, $options: "i" } },

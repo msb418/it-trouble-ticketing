@@ -17,6 +17,9 @@ type Ticket = {
   assignee: string;
   createdAt: string;
   updatedAt: string;
+  archived?: boolean;
+  archivedAt?: string | null;
+  archivedBy?: string | null;
 };
 
 type User = { _id: string; name: string; email: string; role: "admin" | "user" };
@@ -34,6 +37,7 @@ export default function TicketsTable() {
   const [statusFilter, setStatusFilter] = useState<"" | Ticket["status"]>("");
   const [priorityFilter, setPriorityFilter] = useState<"" | Ticket["priority"]>("");
   const [categoryFilter, setCategoryFilter] = useState<"" | Ticket["category"]>("");
+  const [showArchived, setShowArchived] = useState(false);
   const [dateFrom, setDateFrom] = useState<string>("");
   const [dateTo, setDateTo] = useState<string>("");
   const [mineOnly, setMineOnly] = useState(false);
@@ -107,6 +111,7 @@ export default function TicketsTable() {
     setErrorMsg("");
     try {
       const url = new URL("/api/tickets", window.location.origin);
+      if (showArchived) url.searchParams.set("archived", "1");
       if (q) url.searchParams.set("q", q);
       if (statusFilter) url.searchParams.set("status", statusFilter);
       if (mineOnly) url.searchParams.set("mine", "1");
@@ -137,7 +142,7 @@ export default function TicketsTable() {
     if (mineOnly && !myEmail) return;
     load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [statusFilter, mineOnly, myEmail]);
+  }, [statusFilter, mineOnly, myEmail, showArchived]);
 
   // debounced search
   useEffect(() => {
@@ -147,7 +152,7 @@ export default function TicketsTable() {
     }, 350);
     return () => clearTimeout(h);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [q, mineOnly, myEmail]);
+  }, [q, mineOnly, myEmail, showArchived]);
 
   useEffect(() => {
     function maybeRefresh() {
@@ -394,6 +399,15 @@ export default function TicketsTable() {
             />
             My Tickets
           </label>
+          <label className="flex items-center gap-2 text-sm">
+            <input
+              type="checkbox"
+              checked={showArchived}
+              onChange={(e) => setShowArchived(e.target.checked)}
+              title="Include archived tickets"
+            />
+            Show archived
+          </label>
 
           <select
             className="rounded bg-slate-900 p-2 border border-slate-700"
@@ -527,7 +541,7 @@ export default function TicketsTable() {
                 <tr
                   key={t._id}
                   onClick={go}
-                  className="border-b border-slate-800 hover:bg-slate-900/40 cursor-pointer"
+                  className={`border-b border-slate-800 cursor-pointer ${t.archived ? "opacity-70" : "hover:bg-slate-900/40"}`}
                 >
                   <td className="py-2 pr-2">
                     <input
@@ -540,14 +554,22 @@ export default function TicketsTable() {
                   </td>
 
                   <td className="py-2">
-                    <Link
-                      href={`/tickets/${t._id}`}
-                      className="block w-full truncate text-sky-400 hover:underline"
-                      onClick={stop}
-                      title={t.title}
-                    >
-                      {t.title}
-                    </Link>
+                    <div className="flex items-center gap-2">
+                      <Link
+                        href={`/tickets/${t._id}`}
+                        prefetch={false}
+                        className="block max-w-[28ch] truncate text-sky-400 hover:underline"
+                        onClick={stop}
+                        title={t.title}
+                      >
+                        {t.title}
+                      </Link>
+                      {t.archived ? (
+                        <span className="shrink-0 rounded bg-slate-800 px-2 py-0.5 text-[10px] uppercase tracking-wide text-slate-300 border border-slate-700" title="Archived">
+                          Archived
+                        </span>
+                      ) : null}
+                    </div>
                   </td>
 
                   <td className="py-2">
@@ -557,7 +579,7 @@ export default function TicketsTable() {
                       onChange={(e) => updateField(t._id, "priority", e.target.value)}
                       className="w-28 bg-slate-900 border border-slate-700 rounded px-1 py-0.5"
                       disabled={
-                        !(
+                        t.archived || !(
                           isAdmin ||
                           t.assignee?.toLowerCase() === (myEmail || "").toLowerCase() ||
                           t.reporterEmail?.toLowerCase() === (myEmail || "").toLowerCase()
@@ -577,7 +599,7 @@ export default function TicketsTable() {
                       onChange={(e) => updateField(t._id, "category", e.target.value)}
                       className="w-32 bg-slate-900 border border-slate-700 rounded px-1 py-0.5"
                       disabled={
-                        !(
+                        t.archived || !(
                           isAdmin ||
                           t.assignee?.toLowerCase() === (myEmail || "").toLowerCase() ||
                           t.reporterEmail?.toLowerCase() === (myEmail || "").toLowerCase()
@@ -597,7 +619,7 @@ export default function TicketsTable() {
                       onChange={(e) => updateField(t._id, "status", e.target.value)}
                       className="w-32 bg-slate-900 border border-slate-700 rounded px-1 py-0.5"
                       disabled={
-                        !(
+                        t.archived || !(
                           isAdmin ||
                           t.assignee?.toLowerCase() === (myEmail || "").toLowerCase() ||
                           t.reporterEmail?.toLowerCase() === (myEmail || "").toLowerCase()
@@ -624,6 +646,7 @@ export default function TicketsTable() {
                         onChange={(e) => updateField(t._id, "assignee", e.target.value)}
                         className="w-[220px] max-w-[220px] truncate bg-slate-900 border border-slate-700 rounded px-1 py-0.5"
                         title={t.assignee || "Unassigned"}
+                        disabled={t.archived}
                       >
                         <option value="">Unassigned</option>
                         {assigneeOptions.map((u) => (
