@@ -3,6 +3,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
+import { useSession } from "next-auth/react";
 
 type Ticket = {
   _id: string;
@@ -32,6 +33,8 @@ const CATEGORIES: Ticket["category"][] = ["Hardware", "Software", "Network", "Ot
 const STATUSES: Ticket["status"][] = ["Open", "In Progress", "Resolved", "Closed"];
 
 export default function TicketDetail({ ticket }: { ticket: Ticket }) {
+  const { data: session } = useSession();
+  const isAdmin = session?.user?.role === "admin";
   const idRef = useRef(ticket._id);
   const [t, setT] = useState(ticket);
   const [assigneeInput, setAssigneeInput] = useState(ticket.assignee || "");
@@ -42,6 +45,11 @@ export default function TicketDetail({ ticket }: { ticket: Ticket }) {
   const [cBody, setCBody] = useState("");
   const [cInternal, setCInternal] = useState(false);
   const [cErr, setCErr] = useState<string | null>(null);
+
+  // Description edit state
+  const [desc, setDesc] = useState(ticket.description);
+  const [savingDesc, setSavingDesc] = useState(false);
+  const [descDirty, setDescDirty] = useState(false);
 
   async function patch(patch: Partial<Ticket>) {
     setSaving(true);
@@ -114,11 +122,43 @@ export default function TicketDetail({ ticket }: { ticket: Ticket }) {
     await patch({ assignee: next });
   }
 
+  async function saveDescription() {
+    const next = desc.trim();
+    if (next === t.description) {
+      setDescDirty(false);
+      return;
+    }
+    setSavingDesc(true);
+    try {
+      setDesc(next); // keep local in sync
+      await patch({ description: next });
+      setDescDirty(false);
+    } catch {
+      // patch() already alerts & reloads on fatal error
+    } finally {
+      setSavingDesc(false);
+    }
+  }
+
   useEffect(() => {
     loadComments();
     setAssigneeInput(ticket.assignee || "");
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Save description with Cmd/Ctrl+S
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "s") {
+        if (descDirty) {
+          e.preventDefault();
+          void saveDescription();
+        }
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [descDirty, desc]);
 
   const meta = useMemo(
     () => [
@@ -164,17 +204,19 @@ export default function TicketDetail({ ticket }: { ticket: Ticket }) {
           {CATEGORIES.map((c) => <option key={c}>{c}</option>)}
         </select>
         <input
-          className="rounded bg-slate-900 p-2"
+          className={`rounded bg-slate-900 p-2 ${!isAdmin ? "opacity-60 cursor-not-allowed" : ""}`}
           placeholder="Assignee (optional)"
           value={assigneeInput}
           onChange={(e) => setAssigneeInput(e.target.value)}
-          onBlur={saveAssignee}
+          onBlur={isAdmin ? saveAssignee : undefined}
           onKeyDown={(e) => {
-            if (e.key === "Enter") {
+            if (isAdmin && e.key === "Enter") {
               e.currentTarget.blur(); // triggers onBlur -> save
             }
           }}
-          disabled={saving}
+          readOnly={!isAdmin}
+          disabled={saving || !isAdmin}
+          aria-readonly={!isAdmin}
         />
       </div>
 
@@ -182,7 +224,32 @@ export default function TicketDetail({ ticket }: { ticket: Ticket }) {
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         <div className="md:col-span-2 rounded-xl border border-slate-800 p-4">
           <h2 className="mb-2 font-semibold">Description</h2>
-          <p className="whitespace-pre-wrap text-slate-200">{t.description}</p>
+          <textarea
+            className="w-full h-48 resize-vertical rounded-lg border border-slate-700 bg-slate-900 p-3 leading-relaxed"
+            value={desc}
+            onChange={(e) => { setDesc(e.target.value); setDescDirty(true); }}
+            onBlur={() => { if (descDirty) void saveDescription(); }}
+            placeholder="Describe the issue…"
+          />
+          <div className="mt-2 flex items-center justify-between">
+            <span className="text-xs opacity-70">
+              Tip: Press ⌘S / Ctrl+S to save{descDirty ? " • Unsaved changes" : ""}
+            </span>
+            <div className="flex items-center gap-3">
+              <span className="text-xs opacity-70">{savingDesc ? "Saving…" : `${desc.length} chars`}</span>
+              <button
+                type="button"
+                onClick={saveDescription}
+                disabled={!descDirty || savingDesc}
+                className={`rounded px-3 py-1.5 text-sm transition
+                  ${(!descDirty || savingDesc) ? "bg-slate-700 cursor-not-allowed opacity-60" : "bg-emerald-600 hover:bg-emerald-500"}`}
+                aria-disabled={!descDirty || savingDesc}
+                title={descDirty ? "Save description" : "No changes to save"}
+              >
+                {savingDesc ? "Saving…" : "Save"}
+              </button>
+            </div>
+          </div>
         </div>
         <div className="rounded-xl border border-slate-800 p-4">
           <h2 className="mb-2 font-semibold">Details</h2>

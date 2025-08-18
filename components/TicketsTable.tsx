@@ -252,7 +252,19 @@ export default function TicketsTable() {
   }
 
   async function updateField(id: string, field: keyof Ticket, value: string) {
-    if (!isAdmin && ["status", "priority", "category", "assignee"].includes(field)) return;
+    // Permissions:
+    // - Admins: can edit all fields
+    // - Regular users: can edit status/priority/category for tickets they reported OR are assigned to
+    // - Only admins can reassign
+    if (!isAdmin) {
+      if (field === "assignee") return;
+      const t = data.find((d) => d._id === id);
+      const me = (myEmail || "").toLowerCase();
+      const isMine =
+        !!t &&
+        (t.assignee?.toLowerCase() === me || t.reporterEmail?.toLowerCase() === me);
+      if (!isMine) return;
+    }
 
     const original = data.find((d) => d._id === id)?.[field] as unknown as string | undefined;
     if (String(original ?? "") === String(value ?? "")) return;
@@ -544,7 +556,13 @@ export default function TicketsTable() {
                       value={t.priority}
                       onChange={(e) => updateField(t._id, "priority", e.target.value)}
                       className="w-28 bg-slate-900 border border-slate-700 rounded px-1 py-0.5"
-                      disabled={!isAdmin}
+                      disabled={
+                        !(
+                          isAdmin ||
+                          t.assignee?.toLowerCase() === (myEmail || "").toLowerCase() ||
+                          t.reporterEmail?.toLowerCase() === (myEmail || "").toLowerCase()
+                        )
+                      }
                     >
                       {["Low", "Medium", "High", "Urgent"].map((p) => (
                         <option key={p}>{p}</option>
@@ -558,7 +576,13 @@ export default function TicketsTable() {
                       value={t.category}
                       onChange={(e) => updateField(t._id, "category", e.target.value)}
                       className="w-32 bg-slate-900 border border-slate-700 rounded px-1 py-0.5"
-                      disabled={!isAdmin}
+                      disabled={
+                        !(
+                          isAdmin ||
+                          t.assignee?.toLowerCase() === (myEmail || "").toLowerCase() ||
+                          t.reporterEmail?.toLowerCase() === (myEmail || "").toLowerCase()
+                        )
+                      }
                     >
                       {["Hardware", "Software", "Network", "Other"].map((c) => (
                         <option key={c}>{c}</option>
@@ -572,7 +596,13 @@ export default function TicketsTable() {
                       value={t.status}
                       onChange={(e) => updateField(t._id, "status", e.target.value)}
                       className="w-32 bg-slate-900 border border-slate-700 rounded px-1 py-0.5"
-                      disabled={!isAdmin}
+                      disabled={
+                        !(
+                          isAdmin ||
+                          t.assignee?.toLowerCase() === (myEmail || "").toLowerCase() ||
+                          t.reporterEmail?.toLowerCase() === (myEmail || "").toLowerCase()
+                        )
+                      }
                     >
                       {["Open", "In Progress", "Resolved", "Closed"].map((s) => (
                         <option key={s}>{s}</option>

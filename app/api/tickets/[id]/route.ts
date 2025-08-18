@@ -49,6 +49,7 @@ export async function PATCH(req: NextRequest, { params }: { params: { id?: strin
   if (typeof body.priority === "string") update.priority = body.priority;
   if (typeof body.category === "string") update.category = body.category;
   if (typeof body.assignee === "string") update.assignee = body.assignee.trim();
+  if (typeof body.description === "string") update.description = body.description;
 
   if (Object.keys(update).length === 0) {
     return NextResponse.json({ error: "No valid fields to update" }, { status: 400 });
