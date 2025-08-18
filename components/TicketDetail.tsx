@@ -10,6 +10,8 @@ type User = {
 import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useSession } from "next-auth/react";
+import { useRouter } from "next/navigation";
+import ConfirmDialog from "./ConfirmDialog";
 
 type Ticket = {
   _id: string;
@@ -53,6 +55,10 @@ export default function TicketDetail({ ticket }: { ticket: Ticket }) {
   const [t, setT] = useState(ticket);
   const [assigneeInput, setAssigneeInput] = useState(ticket.assignee || "");
   const [saving, setSaving] = useState(false);
+  const router = useRouter();
+
+  const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false);
+  const [busyDelete, setBusyDelete] = useState(false);
 
   // Users for assignee dropdown
   const [users, setUsers] = useState<User[]>([]);
@@ -189,6 +195,32 @@ export default function TicketDetail({ ticket }: { ticket: Ticket }) {
     }
   }
 
+  async function onDeleteClick() {
+    if (!isAdmin) return;
+    setConfirmDeleteOpen(true);
+  }
+
+  async function handleConfirmDelete() {
+    if (!isAdmin) return;
+    try {
+      setBusyDelete(true);
+      const res = await fetch(`/api/tickets/${idRef.current}`, { method: "DELETE" });
+      if (!res.ok) {
+        const msg = await res.text().catch(() => "Failed to delete");
+        throw new Error(msg || "Failed to delete");
+      }
+      try {
+        window.dispatchEvent(new Event("tickets:changed"));
+      } catch {}
+      setConfirmDeleteOpen(false);
+      router.push("/");
+    } catch (e: any) {
+      alert(e?.message || "Failed to delete");
+    } finally {
+      setBusyDelete(false);
+    }
+  }
+
   useEffect(() => {
     void refreshTicket();
     loadComments();
@@ -301,14 +333,24 @@ export default function TicketDetail({ ticket }: { ticket: Ticket }) {
         </h1>
         <div className="flex items-center gap-2">
           {isAdmin && (
-            <button
-              type="button"
-              onClick={() => patch({ archive: !t.archived } as any)}
-              className="rounded bg-slate-700 px-3 py-1.5 hover:bg-slate-600"
-              title={t.archived ? "Restore ticket" : "Archive ticket"}
-            >
-              {t.archived ? "Restore" : "Archive"}
-            </button>
+            <>
+              <button
+                type="button"
+                onClick={() => patch({ archived: !t.archived } as any)}
+                className="rounded bg-slate-700 px-3 py-1.5 hover:bg-slate-600"
+                title={t.archived ? "Restore ticket" : "Archive ticket"}
+              >
+                {t.archived ? "Restore" : "Archive"}
+              </button>
+              <button
+                type="button"
+                onClick={onDeleteClick}
+                className="rounded bg-rose-700 px-3 py-1.5 hover:bg-rose-600"
+                title="Delete ticket"
+              >
+                Delete
+              </button>
+            </>
           )}
           <Link href="/" className="rounded bg-slate-700 px-3 py-1.5">
             Back
@@ -570,6 +612,15 @@ export default function TicketDetail({ ticket }: { ticket: Ticket }) {
           </ul>
         )}
       </div>
+    {/* Confirm delete dialog */}
+    <ConfirmDialog
+      open={confirmDeleteOpen}
+      title="Delete ticket"
+      onClose={() => setConfirmDeleteOpen(false)}
+      onConfirm={handleConfirmDelete}
+    >
+      <p>Are you sure you want to delete this ticket? This action cannot be undone.</p>
+    </ConfirmDialog>
     </div>
   );
 }
