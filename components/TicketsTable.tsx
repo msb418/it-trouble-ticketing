@@ -46,6 +46,12 @@ export default function TicketsTable() {
   const [selected, setSelected] = useState<Record<string, boolean>>({});
   const [users, setUsers] = useState<User[]>([]);
   const [usersErr, setUsersErr] = useState<string>("");
+  const [busyArchive, setBusyArchive] = useState(false);
+  const [confirmOpen, setConfirmOpen] = useState(false);
+  const [confirmKind, setConfirmKind] = useState<"delete" | "archive">("delete");
+  const [confirmCount, setConfirmCount] = useState(0);
+  const [confirmingBusy, setConfirmingBusy] = useState(false);
+  const confirmActionRef = useRef<null | (() => Promise<void>)>(null);
 
   useEffect(() => {
     async function loadUsers() {
@@ -202,9 +208,19 @@ export default function TicketsTable() {
     setSelected((s) => ({ ...s, [id]: checked }));
   }
 
+  function openConfirm(kind: "delete" | "archive", count: number, onConfirm: () => Promise<void>) {
+    setConfirmKind(kind);
+    setConfirmCount(count);
+    confirmActionRef.current = onConfirm;
+    setConfirmOpen(true);
+  }
+
   async function deleteSelected() {
     if (!isAdmin || selectedIds.length === 0) return;
-    if (!confirm(`Delete ${selectedIds.length} ticket(s)?`)) return;
+    openConfirm("delete", selectedIds.length, deleteSelectedInternal);
+  }
+
+  async function deleteSelectedInternal() {
     const res = await fetch("/api/tickets/bulk-delete", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -217,6 +233,34 @@ export default function TicketsTable() {
     }
     setSelected({});
     await load();
+  }
+
+  async function archiveSelected() {
+    if (!isAdmin || selectedIds.length === 0) return;
+    openConfirm("archive", selectedIds.length, archiveSelectedInternal);
+  }
+
+  async function archiveSelectedInternal() {
+    try {
+      setBusyArchive(true);
+      for (const id of selectedIds) {
+        const res = await fetch(`/api/tickets/${id}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ field: "archived", value: true }),
+        });
+        if (!res.ok) {
+          const t = await res.text().catch(() => "");
+          throw new Error(t || `Failed to archive ${id}`);
+        }
+      }
+      setSelected({});
+      await load();
+    } catch (e) {
+      alert((e as Error).message || "Failed to archive selected");
+    } finally {
+      setBusyArchive(false);
+    }
   }
 
   function exportCSV(rows: Ticket[]) {
@@ -471,15 +515,29 @@ export default function TicketsTable() {
             Export CSV
           </button>
           {isAdmin && (
-            <button
-              onClick={deleteSelected}
-              className={`rounded px-3 py-1.5 ${
-                selectedIds.length ? "bg-rose-700 hover:bg-rose-600" : "bg-rose-900/60 cursor-not-allowed"
-              }`}
-              disabled={!selectedIds.length}
-            >
-              Delete Selected
-            </button>
+            <>
+              <button
+                onClick={archiveSelected}
+                className={`rounded px-3 py-1.5 ${
+                  selectedIds.length && !busyArchive
+                    ? "bg-amber-600 hover:bg-amber-500"
+                    : "bg-amber-900/60 cursor-not-allowed"
+                }`}
+                disabled={!selectedIds.length || busyArchive}
+                title="Move selected tickets to the archive"
+              >
+                {busyArchive ? "Archiving…" : "Archive Selected"}
+              </button>
+              <button
+                onClick={deleteSelected}
+                className={`rounded px-3 py-1.5 ${
+                  selectedIds.length ? "bg-rose-700 hover:bg-rose-600" : "bg-rose-900/60 cursor-not-allowed"
+                }`}
+                disabled={!selectedIds.length}
+              >
+                Delete Selected
+              </button>
+            </>
           )}
         </div>
       </div>
@@ -717,6 +775,55 @@ export default function TicketsTable() {
           </div>
         </div>
       </div>
+    {/* Modal for confirm actions */}
+    {confirmOpen && (
+      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60" role="dialog" aria-modal="true">
+        <div className="w-full max-w-sm rounded-xl bg-slate-900 p-4 shadow-xl ring-1 ring-slate-700">
+          <h3 className="text-base font-semibold mb-2">
+            {confirmKind === "delete" ? "Delete selected tickets?" : "Archive selected tickets?"}
+          </h3>
+          <p className="mb-4 text-sm text-slate-300">
+            {confirmKind === "delete"
+              ? `You are about to delete ${confirmCount} ticket(s). This action cannot be undone.`
+              : `You are about to archive ${confirmCount} ticket(s). You can view them later with "Show archived".`}
+          </p>
+          <div className="flex justify-end gap-2">
+            <button
+              className="rounded bg-slate-700 px-3 py-1.5 text-sm hover:bg-slate-600"
+              onClick={() => {
+                if (confirmingBusy) return;
+                setConfirmOpen(false);
+                setConfirmCount(0);
+                confirmActionRef.current = null;
+              }}
+              disabled={confirmingBusy}
+            >
+              Cancel
+            </button>
+            <button
+              className={`rounded px-3 py-1.5 text-sm ${
+                confirmKind === "delete" ? "bg-rose-700 hover:bg-rose-600" : "bg-amber-600 hover:bg-amber-500"
+              } ${confirmingBusy ? "opacity-70 cursor-not-allowed" : ""}`}
+              onClick={async () => {
+                if (!confirmActionRef.current) return;
+                try {
+                  setConfirmingBusy(true);
+                  await confirmActionRef.current();
+                  setConfirmOpen(false);
+                  setConfirmCount(0);
+                  confirmActionRef.current = null;
+                } finally {
+                  setConfirmingBusy(false);
+                }
+              }}
+              disabled={confirmingBusy}
+            >
+              {confirmingBusy ? (confirmKind === "delete" ? "Deleting…" : "Archiving…") : "Confirm"}
+            </button>
+          </div>
+        </div>
+      </div>
+    )}
     </div>
   );
 }

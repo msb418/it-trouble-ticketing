@@ -110,9 +110,11 @@ export async function PATCH(
   const isAdmin = (session.user as any)?.role === "admin";
   const actor = (session.user?.email as string) || (session.user?.name as string) || "unknown";
 
-  // Allow admin to toggle archive via { archive: boolean }
-  const hasArchiveToggle = Object.prototype.hasOwnProperty.call(incoming, "archive");
-  const wantsArchiveToggle = isAdmin && typeof incoming.archive === "boolean";
+  // Allow admin to toggle archive via { archive: boolean } OR { archived: boolean }
+  const hasArchiveKey = Object.prototype.hasOwnProperty.call(incoming, "archived") ||
+                        Object.prototype.hasOwnProperty.call(incoming, "archive");
+  const requestedArchiveValueRaw = hasArchiveKey ? (incoming.archived ?? incoming.archive) : undefined;
+  const wantsArchiveToggle = isAdmin && typeof requestedArchiveValueRaw === "boolean";
 
   // Build allowed field set (non-archive fields)
   const allowedForAll = new Set(["status", "priority", "category", "description"]);
@@ -124,8 +126,9 @@ export async function PATCH(
   // Enforce read-only when archived (except unarchive by admin)
   if (current.archived) {
     // If trying to unarchive, we allow it; otherwise block other edits
-    const onlyArchiveProvided = Object.keys(incoming).every((k) => k === "archive");
-    if (!(wantsArchiveToggle && incoming.archive === false)) {
+    const onlyArchiveProvided = Object.keys(incoming).every((k) => k === "archive" || k === "archived");
+    const isUnarchiving = wantsArchiveToggle && requestedArchiveValueRaw === false;
+    if (!isUnarchiving) {
       if (!onlyArchiveProvided) {
         return NextResponse.json(
           { error: "Ticket is archived and read-only. Unarchive to edit." },
@@ -150,7 +153,7 @@ export async function PATCH(
 
   // Handle archive toggle first (admin only)
   if (wantsArchiveToggle) {
-    const nextArchived: boolean = !!incoming.archive;
+    const nextArchived: boolean = !!requestedArchiveValueRaw;
     if (Boolean(current.archived) !== nextArchived) {
       // Record audit line for archive/unarchive
       activityEntries.push({
@@ -170,7 +173,7 @@ export async function PATCH(
   // Build updates for allowed non-archive fields (skip if archived and not unarchiving)
   const nonArchiveUpdate: Record<string, any> = {};
   for (const [field, newVal] of Object.entries(incoming)) {
-    if (field === "archive") continue; // handled above
+    if (field === "archive" || field === "archived") continue; // handled above
     if (!allowed.has(field)) continue;
     const oldVal = (current as any)[field];
     if (oldVal !== newVal) {

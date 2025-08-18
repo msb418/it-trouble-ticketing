@@ -1,7 +1,7 @@
 // app/users/page.tsx
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 type User = { _id: string; name: string; email: string; role: "admin" | "user"; createdAt: string };
 
@@ -15,6 +15,18 @@ export default function UsersPage() {
   const [email, setEmail] = useState("");
   const [role, setRole] = useState<"admin" | "user">("user");
   const [password, setPassword] = useState("");
+
+  // Confirm modal state for destructive actions (delete user)
+  const [confirmOpen, setConfirmOpen] = useState(false);
+  const [confirmCount, setConfirmCount] = useState(0);
+  const [confirmingBusy, setConfirmingBusy] = useState(false);
+  const confirmActionRef = useRef<null | (() => Promise<void>)>(null);
+
+  function openConfirm(count: number, onConfirm: () => Promise<void>) {
+    setConfirmCount(count);
+    confirmActionRef.current = onConfirm;
+    setConfirmOpen(true);
+  }
 
   async function load() {
     setLoading(true);
@@ -78,14 +90,15 @@ export default function UsersPage() {
   }
 
   async function remove(id: string) {
-    if (!confirm("Delete this user?")) return;
-    try {
+    openConfirm(1, async () => {
       const res = await fetch(`/api/users/${id}`, { method: "DELETE" });
-      if (!res.ok) throw new Error(await res.text());
+      if (!res.ok) {
+        const t = await res.text().catch(() => "");
+        alert(t || "Failed to delete user");
+        return;
+      }
       await load();
-    } catch (e: any) {
-      alert(e?.message || "Failed to delete user");
-    }
+    });
   }
 
   useEffect(() => { load(); }, []);
@@ -160,6 +173,49 @@ export default function UsersPage() {
           </table>
         )}
       </div>
+
+      {confirmOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60" role="dialog" aria-modal="true">
+          <div className="w-full max-w-sm rounded-xl bg-slate-900 p-4 shadow-xl ring-1 ring-slate-700">
+            <h3 className="text-base font-semibold mb-2">Delete selected user{confirmCount === 1 ? "" : "s"}?</h3>
+            <p className="mb-4 text-sm text-slate-300">
+              You are about to delete {confirmCount} user{confirmCount === 1 ? "" : "s"}. This action cannot be undone.
+            </p>
+            <div className="flex justify-end gap-2">
+              <button
+                className="rounded bg-slate-700 px-3 py-1.5 text-sm hover:bg-slate-600"
+                onClick={() => {
+                  if (confirmingBusy) return;
+                  setConfirmOpen(false);
+                  setConfirmCount(0);
+                  confirmActionRef.current = null;
+                }}
+                disabled={confirmingBusy}
+              >
+                Cancel
+              </button>
+              <button
+                className={`rounded px-3 py-1.5 text-sm bg-rose-700 hover:bg-rose-600 ${confirmingBusy ? "opacity-70 cursor-not-allowed" : ""}`}
+                onClick={async () => {
+                  if (!confirmActionRef.current) return;
+                  try {
+                    setConfirmingBusy(true);
+                    await confirmActionRef.current();
+                    setConfirmOpen(false);
+                    setConfirmCount(0);
+                    confirmActionRef.current = null;
+                  } finally {
+                    setConfirmingBusy(false);
+                  }
+                }}
+                disabled={confirmingBusy}
+              >
+                {confirmingBusy ? "Deleting…" : "Confirm"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
