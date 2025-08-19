@@ -72,3 +72,10 @@ MIT — feel free to use, modify, and adapt for personal or commercial use.
 
 Author: Matt Bureau
 LinkedIn: www.linkedin.com/in/matthew-b-69326015
+
+
+![D6768F48-1B20-40B0-9816-5A3C42843616_1_105_c](https://github.com/user-attachments/assets/0544e106-7110-41b0-9237-7be52cdb10a9)
+![4B0AF06D-E00C-4ADB-98CE-9C77B0C164F9_1_105_c](https://github.com/user-attachments/assets/84069a11-2a65-4df6-abb9-cf22e38b8263)
+![C039EE02-9620-4308-B5E2-C37BD0EBFCA6_1_201_a](https://github.com/user-attachments/assets/daeab335-104e-416c-b585-b8eb3ed649f8)
+![B6BB49C8-5D56-4A6E-B4DC-1BBCAD57599A_1_105_c](https://github.com/user-attachments/assets/5fea12a1-6bfa-42cf-9cbb-6c6d8a13d529)
+![566651DB-DAB3-4485-ACC6-2FF6E53D9037_1_105_c](https://github.com/user-attachments/assets/2f0474e8-3e0b-46d4-b36b-560b4b772d5b)
